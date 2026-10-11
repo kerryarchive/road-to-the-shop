@@ -88,7 +88,7 @@ RepairIQ Academy is a 3D driving game that runs in the browser on a laptop or ph
 
 - **Main track:** Cox Social Good. Drivers with the least money and the least car knowledge are the easiest to overcharge. The game builds the one skill that protects them: recognizing a bad quote.
 - **MLH Best Use of Gemini API:** Gemini writes three distinct shop personas per crash, grounded in a price range, as structured JSON that our code validates and scores.
-- **Shock Tracker: Zero Data:** no accounts, logins, profiles, analytics, or cookies. The browser stores nothing, and the only data sent is the name of the obstacle you hit.
+- **Shock Tracker: Zero Data:** no accounts, logins, profiles, analytics, or cookies. The browser stores nothing, and the only data sent is the name of the obstacle you hit. To write the quotes, our server sends Google Gemini only a short description of the in-game damage, with no personal information, IP address, or identifier.
 
 ## Disclosure: what existed before Hacklanta
 

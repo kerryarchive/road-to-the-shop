@@ -41,7 +41,7 @@ RepairIQ Academy lets people practice that moment before it happens for real, in
 
 ## Zero Data
 
-RepairIQ Academy has no accounts, no logins, no profiles, no analytics, and no cookies. The browser stores nothing. The only data the game sends is the name of the obstacle you hit (for example `"pothole"`), to our own server, to get quotes. The server has no database and writes no files; while it runs, its terminal shows the standard request lines and nothing is saved. Everything resets when you close the tab.
+RepairIQ Academy has no accounts, no logins, no profiles, no analytics, and no cookies. The browser stores nothing. The only data the game sends is the name of the obstacle you hit (for example `"pothole"`), to our own server, to get quotes. To write the quotes, the server sends Google Gemini only a short description of the in-game damage (for example, "blew the tire bead and bent the rim"). Nothing about the player is included: no personal information, IP address, or identifier. The server has no database and writes no files; while it runs, its terminal shows the standard request lines and nothing is saved. Everything resets when you close the tab.
 
 ## Run it locally
 
