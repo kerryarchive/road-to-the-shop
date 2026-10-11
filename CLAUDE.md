@@ -1,12 +1,25 @@
-# CLAUDE.md: Project context for Road to the Shop (RepairIQ)
+# CLAUDE.md: Project context for RepairIQ Academy (formerly Road to the Shop)
 
-This file carries over context from a planning and build conversation in the Claude app (Oct 10, 2026). Read it before making changes.
+This file carries over context from planning and build sessions in the Claude app and Claude Code (Oct 10–11, 2026). Read it before making changes.
 
 ## Who we are and what this is for
 
 - Three-person college team at **Hacklanta** (36-hour hackathon, Georgia State University, Atlanta).
 - Beginner-to-intermediate Python, intro web dev. **Explain decisions in plain language.** Keep the architecture simple.
-- Target prizes: **Cox Automotive / Social Good** (primary), **AI/ML**, **Creative**, and **Best Use of Gemini API**.
+
+## Deadlines, tracks, and submission (Hacklanta 2026)
+
+- **Hacking ends 9:00 AM Sunday, Oct 11, 2026. Our target is to submit by 8:00 AM.** After that, don't start new features; only fix bugs and finish the submission.
+- **Main track (only one allowed): Cox Social Good.**
+- **Side challenges:** MLH Best Use of Gemini API, and Shock Tracker: Zero Data.
+- **To submit:**
+  1. Public GitHub repo: https://github.com/kerryarchive/road-to-the-shop (confirmed public)
+  2. Public 2–3 minute demo video (YouTube or Google Drive), linked in `README.md` and Devpost
+  3. Devpost write-up, drafted in `docs/DEVPOST.md` (includes the full checklist)
+  4. The Google Form posted in Discord
+  Only one team member submits Devpost and the form.
+- **Judging:** 9:30–11:30 AM in the State Ballroom, 3-minute pitch + 2-minute Q&A, 2 judges per table. Judges score track fit, demo polish, presentation, and how clear and compelling the use case is. Pitch script, Q&A prep, and video plan are in `docs/PITCH.md`.
+- **Zero Data claim** (README, Devpost): no accounts, logins, analytics, cookies, or browser storage; the server has no database and writes no files. Keep it that way: don't add tracking, storage, or logging of player data.
 
 ## Project history (how we got here)
 
@@ -14,7 +27,8 @@ This file carries over context from a planning and build conversation in the Cla
 2. **RepairIQ** (teammate's plan): photo → damage analysis → repair estimate → replacement parts (eBay) → vehicle log (Supabase), plus Groupon deals. The teammate's audit found the candidate GitHub repos don't produce real damage results without custom weights.
 3. **Merge:** RepairIQ became the core, with ClaimShield ideas as add-ons (deductible check, mechanic questions and adjuster summary, quote checker, language option). Proposed dropping Groupon and deferring Supabase.
 4. **Game idea:** the team discussed adding a game. Options were a game mode inside RepairIQ, or a full pivot to an Atlanta hidden-gems explorer. Recommendation was not to mix two products.
-5. **Current direction (what's built):** **"Road to the Shop"**, a gamified Streamlit app that combines a road-hazard simulation with an AI mechanic-quote simulator. This is what the code implements now.
+5. **First build:** **"Road to the Shop"**, a gamified Streamlit app that combines a road-hazard simulation with an AI mechanic-quote simulator. It still works (`streamlit run app.py`).
+6. **Current direction (main demo):** **RepairIQ Academy**, a 3D driving game (`web/` + `server.py`) with the live Gemini mechanic. See the section below. Judge-facing docs: `README.md`, `docs/DEVPOST.md`, `docs/PITCH.md`; teammate handoff: `docs/HANDOFF.md`.
 
 A shared team doc with the merged plan exists on claude.ai ("RepairIQ — Team Catch-Up Report"). It predates the game build.
 
@@ -28,6 +42,9 @@ A shared team doc with the merged plan exists on claude.ai ("RepairIQ — Team C
 | `requirements.txt` | `streamlit==1.65.0`, `openai==3.26.1`, `python-dotenv==1.2.3`, `flask==3.1.2` |
 | `requirements-dev.txt` | Adds `pytest` for the tests |
 | `tests/` | pytest suites for `app.py` and `server.py` (no API key or internet needed) |
+| `docs/DEVPOST.md` | Devpost copy-paste kit and submission checklist |
+| `docs/PITCH.md` | 3-minute pitch script, Q&A prep, demo video plan |
+| `docs/HANDOFF.md` | Full handoff report: what was built, how to run and change it |
 | `docs/PROJECT_BRIEF.md` | Brief written for an outside AI to analyze the project (predates the 3D game) |
 | `.env.example` | Copy to `.env`; set `GROQ_API_KEY` or `GEMINI_API_KEY` |
 | `README.md` | Hackathon docs: problem, solution, tracks, run steps |
@@ -85,6 +102,5 @@ Built after the team chose a "hybrid" plan: a 3D driving game (instead of the St
 
 ## Open questions for the team
 
-- Final name: "Road to the Shop", "RepairIQ", or both?
-- Bring back any ClaimShield features (photo upload with Gemini vision, deductible check, quote checker) as a bonus mode?
-- Hours left in the hackathon, and who owns which part of the code.
+- Resolved: the name is **RepairIQ Academy**. Photo upload with Gemini vision is listed as "what's next", not built.
+- Still open: demo video link and team names (placeholders in `README.md` and `docs/DEVPOST.md`).
