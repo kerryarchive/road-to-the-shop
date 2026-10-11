@@ -215,26 +215,40 @@ def compute_score(wallet: int, roadworthiness: int) -> dict:
 # AI estimator
 # ---------------------------------------------------------------------------
 
+# Gemini models to try in order. If one is overloaded, rate-limited, or slow,
+# fetch_ai_quotes moves on to the next. Override with a comma-separated
+# GEMINI_MODEL in .env.
+DEFAULT_GEMINI_MODELS = "gemini-3.5-flash, gemini-3.1-flash-lite, gemini-3.8-flash"
+
+
+def _model_list(value: str) -> list[str]:
+    return [m.strip() for m in value.split(",") if m.strip()]
+
+
 def resolve_provider() -> dict | None:
     """Pick the AI provider from environment variables, or None if no key."""
     groq_key = os.getenv("GROQ_API_KEY", "").strip()
     gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
     preferred = os.getenv("AI_PROVIDER", "").strip().lower()
 
+    groq_models = _model_list(os.getenv("GROQ_MODEL", "") or "llama-3.1-8b-instant")
     groq = {
         "name": "Groq",
         "env_var": "GROQ_API_KEY",
         "api_key": groq_key,
         "base_url": "https://api.groq.com/openai/v1",
-        "model": os.getenv("GROQ_MODEL", "llama-3.1-8b-instant").strip(),
+        "model": groq_models[0],
+        "models": groq_models,
     } if groq_key else None
 
+    gemini_models = _model_list(os.getenv("GEMINI_MODEL", "") or DEFAULT_GEMINI_MODELS)
     gemini = {
         "name": "Gemini",
         "env_var": "GEMINI_API_KEY",
         "api_key": gemini_key,
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
-        "model": os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip(),
+        "model": gemini_models[0],
+        "models": gemini_models,
     } if gemini_key else None
 
     if preferred == "gemini" and gemini:
@@ -374,8 +388,8 @@ def fetch_ai_quotes(log: list, client_factory=None) -> dict:
     client = factory(
         api_key=provider["api_key"],
         base_url=provider["base_url"],
-        timeout=30.0,
-        max_retries=1,
+        timeout=20.0,
+        max_retries=0,  # instead of retrying a busy model, we move on to the next one
     )
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -384,47 +398,60 @@ def fetch_ai_quotes(log: list, client_factory=None) -> dict:
 
     auth_error = _api_error("AuthenticationError")
     rate_error = _api_error("RateLimitError")
-    conn_error = _api_error("APIConnectionError")
+    conn_error = _api_error("APIConnectionError")  # includes timeouts
     bad_request = _api_error("BadRequestError")
     status_error = _api_error("APIStatusError")
 
-    last_error: QuoteError | None = None
-    # Attempt 1 uses JSON mode; attempt 2 retries without it in case the
-    # provider or model rejects response_format, or the reply was malformed.
-    for use_json_mode in (True, False):
-        kwargs = {"model": provider["model"], "messages": messages, "temperature": 0.7}
-        if use_json_mode:
-            kwargs["response_format"] = {"type": "json_object"}
-        try:
-            response = client.chat.completions.create(**kwargs)
-        except auth_error as exc:
-            raise QuoteError(
-                f"{provider['name']} rejected the API key. Check {provider['env_var']} in your .env file."
-            ) from exc
-        except rate_error as exc:
-            raise QuoteError(f"{provider['name']} rate limit reached. Wait a minute and retry.") from exc
-        except conn_error as exc:
-            raise QuoteError(f"Couldn't reach {provider['name']}. Check your internet connection.") from exc
-        except bad_request as exc:
-            detail = getattr(exc, "message", "") or str(exc)
-            last_error = QuoteError(f"{provider['name']} rejected the request: {detail[:200]}")
-            continue
-        except status_error as exc:
-            code = getattr(exc, "status_code", "unknown")
-            raise QuoteError(f"{provider['name']} returned an error (status {code}). Try again.") from exc
+    unavailable: QuoteError | None = None
+    for model in provider.get("models") or [provider["model"]]:
+        last_error: QuoteError | None = None
+        # Attempt 1 uses JSON mode; attempt 2 retries without it in case the
+        # provider or model rejects response_format, or the reply was malformed.
+        for use_json_mode in (True, False):
+            kwargs = {"model": model, "messages": messages, "temperature": 0.7}
+            if use_json_mode:
+                kwargs["response_format"] = {"type": "json_object"}
+            try:
+                response = client.chat.completions.create(**kwargs)
+            except auth_error as exc:
+                raise QuoteError(
+                    f"{provider['name']} rejected the API key. Check {provider['env_var']} in your .env file."
+                ) from exc
+            except rate_error:
+                unavailable = QuoteError(f"{provider['name']} rate limit reached. Wait a minute and retry.")
+                break
+            except conn_error:
+                unavailable = QuoteError(
+                    f"Couldn't reach {provider['name']} or it was too slow. Check your internet connection."
+                )
+                break
+            except bad_request as exc:
+                detail = getattr(exc, "message", "") or str(exc)
+                last_error = QuoteError(f"{provider['name']} rejected the request: {detail[:200]}")
+                continue
+            except status_error as exc:
+                code = getattr(exc, "status_code", "unknown")
+                if code == 404 or (isinstance(code, int) and code >= 500):
+                    # Model retired or overloaded: try the next model.
+                    unavailable = QuoteError(f"{provider['name']} is busy (status {code}). Try again.")
+                    break
+                raise QuoteError(f"{provider['name']} returned an error (status {code}). Try again.") from exc
 
-        choices = getattr(response, "choices", None) or []
-        content = choices[0].message.content if choices else ""
-        try:
-            result = validate_payload(extract_json(content))
-        except QuoteError as exc:
-            last_error = exc
-            continue
-        result["is_ai"] = True
-        result["source"] = f"AI estimate · {provider['name']} ({provider['model']})"
-        return result
+            choices = getattr(response, "choices", None) or []
+            content = choices[0].message.content if choices else ""
+            try:
+                result = validate_payload(extract_json(content))
+            except QuoteError as exc:
+                last_error = exc
+                continue
+            result["is_ai"] = True
+            result["source"] = f"AI estimate · {provider['name']} ({model})"
+            return result
+        else:
+            # Both attempts reached the model but its replies were unusable.
+            raise last_error or QuoteError("The estimator didn't return usable quotes.")
 
-    raise last_error or QuoteError("The estimator didn't return usable quotes.")
+    raise unavailable or QuoteError("The estimator didn't return usable quotes.")
 
 
 def build_offline_quotes(log: list) -> dict:

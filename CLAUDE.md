@@ -22,15 +22,29 @@ A shared team doc with the merged plan exists on claude.ai ("RepairIQ — Team C
 
 | File | Purpose |
 |---|---|
-| `app.py` | The whole app (~875 lines), single file, three stages |
-| `requirements.txt` | `streamlit==1.65.0`, `openai==3.26.1`, `python-dotenv==1.2.3` |
+| `app.py` | Streamlit version (single file, three stages) **and** the shared game data + AI code (`HAZARDS`, `fetch_ai_quotes`, `build_offline_quotes`) |
+| `server.py` | Flask server for the 3D game: serves `web/` and `POST /api/quotes` (keeps the API key off the browser) |
+| `web/` | **RepairIQ Academy**, the 3D game: `index.html`, `style.css`, `game.js`, and `vendor/` (three.js r170, MIT) |
+| `requirements.txt` | `streamlit==1.65.0`, `openai==3.26.1`, `python-dotenv==1.2.3`, `flask==3.1.2` |
 | `requirements-dev.txt` | Adds `pytest` for the tests |
-| `tests/test_app.py` | pytest suite (no API key or internet needed) |
+| `tests/` | pytest suites for `app.py` and `server.py` (no API key or internet needed) |
+| `docs/PROJECT_BRIEF.md` | Brief written for an outside AI to analyze the project (predates the 3D game) |
 | `.env.example` | Copy to `.env`; set `GROQ_API_KEY` or `GEMINI_API_KEY` |
 | `README.md` | Hackathon docs: problem, solution, tracks, run steps |
 | `.gitignore` | Keeps `.env` and `.venv/` out of Git |
 
-Run: `streamlit run app.py` (inside an activated `.venv`).
+Run (inside an activated `.venv`): `python server.py` for the 3D game (http://localhost:8000), or `streamlit run app.py` for the Streamlit version.
+
+## RepairIQ Academy (the 3D game, main demo since Oct 11)
+
+Built after the team chose a "hybrid" plan: a 3D driving game (instead of the Streamlit button "commute") plus the existing live Gemini mechanic. The game code was written from scratch during the hackathon; only three.js is third-party.
+
+- **States in `game.js`:** `READY` → `DRIVING` → `MECHANIC` → `RESULTS`.
+- **Drive:** 15 s, 3 lanes, speed ramps up. Obstacles map to `HAZARDS` keys: traffic car → `sideswipe`, cone → `cone`, pothole → `pothole`. Up to 300 points by time survived. Keyboard, on-screen arrows, or swipe.
+- **Mechanic challenge (700):** step 1 what to inspect (150) and step 2 repair vs. replace (150) use team-written `SCENARIOS` in `game.js`; step 3 shows the AI quotes as unlabeled Shop A/B/C (fair 400, dealer 150, budget 0) and reveals them after the pick. Quotes are requested as soon as the mechanic starts, so the AI works while the player answers steps 1–2.
+- **"Try Mechanic Challenge"** loads a sample scenario that is labeled as such (no fake crash).
+- All server/AI text is inserted with `textContent`, never `innerHTML`.
+- A test checks that every `HAZARDS` key has an obstacle and a scenario in `game.js`. Keep them in sync when adding hazards.
 
 ## How `app.py` works
 
@@ -46,7 +60,7 @@ Run: `streamlit run app.py` (inside an activated `.venv`).
 3. **Scorecard.** Choosing a route deducts its cost and sets roadworthiness (Dealer 100, Budget 45, Fair 95). `compute_score()` grades 50% Financial Health and 50% Road Safety (A–F). There's a "Play Again" reset.
 
 **Key design decisions:**
-- **AI provider:** uses the `openai` package for both providers. Groq is `https://api.groq.com/openai/v1` with `llama-3.1-8b-instant`. Gemini goes through its OpenAI-compatible endpoint (`GEMINI_MODEL` defaults to `gemini-3.8-flash`, which may need updating). `AI_PROVIDER=gemini` prefers Gemini when both keys are set.
+- **AI provider:** uses the `openai` package for both providers. Groq is `https://api.groq.com/openai/v1` with `llama-3.1-8b-instant`. Gemini goes through its OpenAI-compatible endpoint. `GEMINI_MODEL` is a comma-separated list tried in order (default `DEFAULT_GEMINI_MODELS`: `gemini-3.5-flash, gemini-3.1-flash-lite, gemini-3.8-flash`); on a timeout, 429, 404 or 5xx the next model is tried. On Oct 11 `gemini-3.8-flash` was often overloaded or timing out, which is why it's last. `AI_PROVIDER=gemini` prefers Gemini when both keys are set.
 - **The game controls the numbers that matter.** Titles, risk labels, and roadworthiness come from `QUOTE_META`, not the AI. The AI writes only prices, descriptions, the greeting, and tips.
 - **Grounding:** each hazard has an illustrative `ref_low`/`ref_high` range. The fair quote is told to land inside it, and the shop shows the range so players can judge offers. These are game numbers, not real prices, and the UI says so.
 - **Validation:** `extract_json()` handles code fences and stray text. `validate_payload()` coerces and checks costs ($1–$50,000), pads tips to 3, and warns if the prices aren't ordered budget < fair < dealer.
@@ -58,8 +72,9 @@ Run: `streamlit run app.py` (inside an activated `.venv`).
 
 ## Testing status
 
-- `tests/test_app.py`: 34 pytest tests covering game logic, scoring, JSON parsing and validation, `fetch_ai_quotes` (through a fake client, no network), and the offline fallback. Run `pytest` after `pip install -r requirements-dev.txt`.
-- Verified Oct 11, 2026: the real Streamlit app runs end to end (commute, shop, scorecard), both offline and with live Gemini (`gemini-3.8-flash`). `gemini-2.5-flash` is retired for new keys.
+- 52 pytest tests in `tests/` covering game logic, scoring, JSON parsing and validation, `fetch_ai_quotes` incl. model fallback (fake client, no network), the offline fallback, and the `/api/quotes` route. Run `pytest` after `pip install -r requirements-dev.txt`.
+- Verified Oct 11, 2026: the Streamlit app runs end to end, offline and with live Gemini. The 3D game was played end to end in headless Chrome at desktop (1280×800) and phone (390×844) sizes with no JS errors, with both live Gemini quotes and the offline fallback. `gemini-2.5-flash` is retired for new keys.
+- **Not yet done:** a test on a real phone, and hosting it online.
 
 ## Principles to keep
 

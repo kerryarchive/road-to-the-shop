@@ -235,8 +235,53 @@ def test_fetch_ai_quotes_bad_key_message(gemini_env, one_pothole, monkeypatch):
         app.fetch_ai_quotes(one_pothole, client_factory=factory_for(client))
 
 
-def test_gemini_default_model(gemini_env):
-    assert app.resolve_provider()["model"] == "gemini-3.8-flash"
+def test_gemini_default_models(gemini_env):
+    provider = app.resolve_provider()
+    assert provider["model"] == "gemini-3.5-flash"
+    assert len(provider["models"]) >= 2
+
+
+def test_gemini_model_list_from_env(gemini_env, monkeypatch):
+    monkeypatch.setenv("GEMINI_MODEL", "model-a, model-b")
+    assert app.resolve_provider()["models"] == ["model-a", "model-b"]
+
+
+class FakeStatusError(Exception):
+    def __init__(self, status_code):
+        super().__init__(f"status {status_code}")
+        self.status_code = status_code
+
+
+class FakeRateError(Exception):
+    pass
+
+
+@pytest.fixture
+def two_models(gemini_env, monkeypatch):
+    monkeypatch.setenv("GEMINI_MODEL", "busy-model, good-model")
+    monkeypatch.setattr(app.openai, "APIStatusError", FakeStatusError)
+    monkeypatch.setattr(app.openai, "RateLimitError", FakeRateError)
+
+
+@pytest.mark.parametrize("failure", [FakeStatusError(503), FakeStatusError(404), FakeRateError("429")])
+def test_busy_model_falls_through_to_next(two_models, one_pothole, failure):
+    client = FakeClient([failure, json.dumps(good_payload())])
+    result = app.fetch_ai_quotes(one_pothole, client_factory=factory_for(client))
+    assert [c["model"] for c in client.calls] == ["busy-model", "good-model"]
+    assert "good-model" in result["source"]
+
+
+def test_all_models_busy_raises_friendly_error(two_models, one_pothole):
+    client = FakeClient([FakeStatusError(503), FakeStatusError(503)])
+    with pytest.raises(app.QuoteError, match="busy"):
+        app.fetch_ai_quotes(one_pothole, client_factory=factory_for(client))
+
+
+def test_other_client_errors_do_not_try_next_model(two_models, one_pothole):
+    client = FakeClient([FakeStatusError(403)])
+    with pytest.raises(app.QuoteError, match="403"):
+        app.fetch_ai_quotes(one_pothole, client_factory=factory_for(client))
+    assert len(client.calls) == 1
 
 
 def test_ai_provider_setting_prefers_gemini(monkeypatch):

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>RepairIQ Academy</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <div id="hud" hidden>
+    <div><span class="label">Time left</span><span id="hud-time">15.0</span></div>
+    <div><span class="label">Speed</span><span id="hud-speed">0 mph</span></div>
+    <div><span class="label">Driving points</span><span id="hud-points">0</span></div>
+  </div>
+
+  <div id="touch" hidden>
+    <button id="btn-left" aria-label="Steer left">&#9664;</button>
+    <button id="btn-right" aria-label="Steer right">&#9654;</button>
+  </div>
+
+  <div id="flash"></div>
+
+  <div id="panel" hidden>
+    <div id="panel-body" class="card"></div>
+  </div>
+
+  <noscript>RepairIQ Academy needs JavaScript to run.</noscript>
+  <script type="module" src="game.js"></script>
+</body>
+</html>
