@@ -273,9 +273,11 @@ Return ONLY a JSON object with exactly these keys:
 Rules:
 - "cost" is a whole number of US dollars covering parts AND labor for ALL listed damage.
 - quote_fair must land inside the combined reference range you are given.
-- quote_dealer must be clearly higher than quote_fair. Its description (2-3 sentences) names the padded items a careful driver should question, such as unnecessary add-ons or inflated labor hours.
-- quote_budget must be clearly lower than quote_fair. Its description (2-3 sentences) explains which corners are cut and why that is unsafe.
-- quote_fair's description (2-3 sentences) explains the parts and standard book labor.
+- quote_dealer must be clearly higher than quote_fair. quote_budget must be clearly lower than quote_fair.
+- Each "description" is that shop's OWN sales pitch to the driver: 2-3 sentences, first person ("we"), confident and friendly. The driver should have to spot the red flags themselves, so never call a shop bad. Do not use words like padded, unnecessary, inflated, upsell, overpriced, predatory, scam, cut-rate, backyard, junk, shoddy, cheap, dangerous, unsafe, or risky.
+- quote_dealer's pitch sounds premium and thorough, but slips in 1-2 specific add-ons or extra labor the listed damage does not need (for example, replacing undamaged parts or repainting extra panels), presented as "while we're in there" or "for peace of mind".
+- quote_budget's pitch sounds like a great deal and promises speed, but mentions 1-2 specific shortcuts as savings (for example, used or unbranded parts, skipping the alignment check, touch-up paint with no clear coat, or no warranty).
+- quote_fair's pitch names the specific parts, standard book labor, a written warranty, and repairs only what was damaged.
 - negotiation_tips: exactly 3 specific questions the driver should ask the shop to avoid being scammed.
 - No markdown and no text outside the JSON object."""
 
