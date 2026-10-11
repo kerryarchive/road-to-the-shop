@@ -1,94 +1,115 @@
-# RepairIQ Academy / Road to the Shop
+# RepairIQ Academy
 
-*Hacklanta 2026 · Georgia State University*
+*Hacklanta 2026 · Georgia State University · Main track: Cox Social Good · Side challenges: MLH Best Use of Gemini API, Shock Tracker: Zero Data*
 
-Games that teach drivers what vehicle damage really costs, and how to avoid getting ripped off at the repair shop.
+**A 3D driving game that teaches drivers what repairs really cost, and how to spot a bad quote before they sign it.**
 
-This repo has two front ends that share the same AI code (`app.py`):
+You drive through Atlanta rush hour. Hit a pothole, a cone, or another car, and you're at the mechanic. You decide what to inspect, whether to repair or replace, and then pick one of three repair quotes written live by Google Gemini. The quotes are unlabeled, so you have to spot the padding and the shortcuts yourself.
 
-| | What it is | Run |
-|---|---|---|
-| **RepairIQ Academy** (main demo) | A 3D driving game in the browser. Survive 15 seconds of Atlanta rush hour; crash and you face a 3-step mechanic challenge with live Gemini quotes. Score out of 1,000. Works on desktop and phone. | `python server.py` → http://localhost:8000 |
-| **Road to the Shop** | The original Streamlit version: pick hazards, get three AI quotes, get graded on money vs. safety. | `streamlit run app.py` → http://localhost:8501 |
+**▶ Demo video:** [watch the 2-minute playthrough](#) <!-- replace # with your public YouTube/Drive link -->
 
-## RepairIQ Academy: how a round works
+## The problem, and who it's for
 
-1. **Drive (up to 300 pts).** Three lanes of traffic, cones and potholes. Steer with ← → / A D, the on-screen arrows, or a swipe.
-2. **Mechanic challenge (up to 700 pts),** after a crash, or from the "Try Mechanic Challenge" button as a clearly labeled sample scenario:
+After a pothole or a fender-bender, most drivers walk into a repair shop with no idea what a fair price is. They can't tell an honest quote from a padded one, or a cheap fix from an unsafe one. The people hit hardest are the ones with the least room for error: students, first-time car owners, and families for whom a $1,000 surprise is a crisis.
+
+RepairIQ Academy lets people practice that moment before it happens for real, in a few minutes, on a phone or laptop, with no account.
+
+## How a round works
+
+1. **Drive (up to 300 points).** 15 seconds, 3 lanes, traffic cars, cones, and potholes. Steer with ← → or A/D, the on-screen arrows, or a swipe.
+2. **Mechanic challenge (up to 700 points).** After a crash, or from the clearly labeled "Try Mechanic Challenge (sample scenario)" button.
    - **Inspect (150):** what should the mechanic check first?
-   - **Repair or replace (150):** decide based on an inspection finding.
-   - **Pick a quote (400):** three AI-written quotes shown as Shop A/B/C with no labels. Fair = 400, dealer = 150, scrapyard = 0. The shops are revealed after you choose.
-3. **Results:** score, grade, and the AI's questions to ask before signing anything.
+   - **Repair or replace (150):** decide from an inspection finding.
+   - **Pick a quote (400):** three Gemini-written quotes shown as Shop A, B, and C. Each reads like that shop's own sales pitch. The dealer slips in add-ons the damage doesn't need; the budget shop mentions shortcuts like skipping the alignment or offering no warranty. Fair = 400, dealer = 150, budget = 0. The shops are revealed after you choose.
+3. **Results.** Score out of 1,000, a grade, a breakdown, and three questions to ask before signing anything at a real shop.
 
-Steps 1 and 2 are training scenarios written by the team. Step 3 uses live Gemini through `server.py`, which keeps the API key on the server. If the AI is unavailable, the game shows offline sample quotes labeled as not AI-generated.
-
-## The problem
-
-After a pothole, a fender-bender, or a scraped mirror, most drivers walk into a shop with no idea what a fair repair costs. They can't tell an honest quote from a padded one, or a cheap fix from a dangerous one. The people who can least afford a $1,000 surprise are the most exposed to predatory markups.
-
-## The original Streamlit version
-
-**Road to the Shop** turns that moment into a game you can practice before it happens for real:
-
-1. **The Commute.** Drive an Atlanta road with $1,500 and a healthy car. Hit real-world hazards (a deep pothole, a construction cone, a tight parked car) and watch your Car Health drop.
-2. **The AI Body Shop.** An LLM plays a gritty Atlanta estimator and returns three quotes as structured JSON: a padded **Dealership OEM Overhaul**, a dangerous **Scrapyard Patch**, and a **Certified Independent Repair** at fair market price. Each is shown against a reference fair range, along with three questions to ask so you don't get scammed.
-3. **The Decision.** Pick a route. The game deducts the cost, sets your car's roadworthiness, and grades you on **Financial Health vs. Road Safety**.
-
-## Hackathon tracks
-
-- **Cox Automotive / Social Good:** consumer protection and financial literacy for drivers facing repair decisions, especially those with the least room for error.
-- **Creative:** an urban road-hazard game paired with a negotiation simulator, instead of another form-based estimator.
-- **AI/ML:** an LLM role-playing a domain expert with strict JSON output, validated in Python, grounded by a reference price range, with a deterministic fallback.
-
-## How it works
+## How the AI works
 
 | Part | Handled by |
 |---|---|
-| Hazards, damage, wallet, roadworthiness, grading | Python (deterministic) |
-| Mechanic greeting, quote descriptions, prices, negotiation tips | LLM (Groq `llama-3.1-8b-instant` or Gemini) |
-| JSON parsing, cost checks, price-order sanity check | Python validation |
-| No key / API down | Offline sample quotes, clearly labeled as not AI-generated |
+| Driving, obstacles, scoring, grades | Game code (`web/game.js`) |
+| Inspection and repair-or-replace scenarios | Written by our team (`SCENARIOS` in `web/game.js`) |
+| Quote prices, shop pitches, mechanic greeting, negotiation tips | **Google Gemini**, live, through `server.py` |
+| Shop titles, risk labels, point values | Fixed in code, never decided by the AI |
+| Checking the AI's reply | Python (`app.py`): pulls JSON out of messy replies, rejects unbelievable prices, fills missing tips, warns if prices aren't in the order budget < fair < dealer |
 
-All AI text is HTML-escaped before display. Reference prices are illustrative game data, not real quotes.
+- **Grounding.** Gemini is told the fair quote must fall inside a reference price range for that damage, the dealer must be higher, and the budget lower. The ranges are illustrative game data, and the game says so.
+- **No giveaways.** The prompt bans words like "overpriced" or "unsafe," so players have to read the pitches critically.
+- **Reliability.** The server tries a list of Gemini models in order and moves on when one is busy, rate-limited, retired, or slower than 20 seconds. The request starts as soon as the challenge begins, so Gemini works while the player answers steps 1 and 2.
+- **Honest fallback.** If there's no key or every model fails, the game shows sample quotes labeled **"not AI-generated"** with a note saying why. The demo never gets stuck.
+- **Security.** The API key stays on the server and never reaches the browser. All AI text is inserted as plain text, never as HTML.
+
+## Zero Data
+
+RepairIQ Academy has no accounts, no logins, no profiles, no analytics, and no cookies. The browser stores nothing. The only data the game sends is the name of the obstacle you hit (for example `"pothole"`), to our own server, to get quotes. The server has no database and writes no files; while it runs, its terminal shows the standard request lines and nothing is saved. Everything resets when you close the tab.
 
 ## Run it locally
 
 Requires Python 3.10 or newer.
 
 ```bash
+git clone https://github.com/kerryarchive/road-to-the-shop.git
+cd road-to-the-shop
 python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
+source .venv/bin/activate          # Windows: .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-cp .env.example .env             # Windows: copy .env.example .env
-# open .env and paste a GEMINI_API_KEY (or GROQ_API_KEY)
-python server.py                 # 3D game:  http://localhost:8000
-streamlit run app.py             # Streamlit version: http://localhost:8501
+cp .env.example .env               # Windows: copy .env.example .env
+# optional: open .env and paste a GEMINI_API_KEY (free at https://aistudio.google.com/apikey)
+python server.py
 ```
 
-Without an API key both still run, with offline sample quotes. To test on a phone, run `python server.py`, connect the phone to the same Wi-Fi, and open `http://<your computer's IP>:8000` (allow Python through the Windows firewall on private networks).
+Open http://localhost:8000. To play on a phone, connect it to the same Wi-Fi and open `http://<your computer's IP>:8000`.
 
-## Run the tests
+### Notes for judges
+
+- **No API key needed to try it.** Without a key, the game runs fully and step 3 uses sample quotes clearly labeled "not AI-generated." Add a free `GEMINI_API_KEY` to `.env` to see live Gemini quotes.
+- **Quick path to the AI part:** on the start screen, choose **Try Mechanic Challenge (sample scenario)**.
+- There are no test accounts or credentials; nothing requires a login.
+
+## Tests
 
 ```bash
 pip install -r requirements-dev.txt
 pytest
 ```
 
-The tests use a fake AI client, so they need no API key or internet.
+52 automated tests cover game logic, AI reply parsing, model fallback, the server route, and the offline fallback. They use a fake AI client, so they need no key or internet.
 
-## Credits
+## What existed before Hacklanta (disclosure)
 
-3D rendering uses [three.js](https://threejs.org) r170 (MIT license, bundled in `web/vendor/` with its license file). All game code was written during the hackathon.
+All project code was written during the Hacklanta hacking period (Oct 9–11, 2026). We built on these existing tools:
+
+- **[three.js](https://threejs.org) r170** for 3D rendering (MIT license, bundled in `web/vendor/` with its license file)
+- **Flask** (web server), **Streamlit** (early prototype UI), **openai** Python SDK (used as the client for Gemini's OpenAI-compatible endpoint), **python-dotenv**, **pytest**
+- **Google Gemini API** for the live quotes
+- **AI coding assistants:** we used Claude (Anthropic) for planning, code, and tests, and ChatGPT to critique our project brief. Every design decision was made by our team.
+
+We looked at an existing open-source car-diagnostics app for ideas, and used none of its code.
+
+## The earlier Streamlit version
+
+`app.py` also contains our first prototype, **Road to the Shop**: pick road hazards, get three AI quotes, and get graded on money left versus road safety. It shares the same AI code as the 3D game. Run it with `streamlit run app.py` (opens at http://localhost:8501).
 
 ## Configuration (`.env`)
 
 | Variable | Purpose |
 |---|---|
-| `GROQ_API_KEY` | Use Groq Cloud (default provider) |
-| `GEMINI_API_KEY` | Use Google Gemini via its OpenAI-compatible endpoint |
-| `AI_PROVIDER` | Set to `gemini` to prefer Gemini when both keys exist |
-| `GROQ_MODEL` / `GEMINI_MODEL` | Override the model; `GEMINI_MODEL` can be a comma-separated list tried in order |
+| `GEMINI_API_KEY` | Live Gemini quotes (used in our demo) |
+| `GEMINI_MODEL` | Optional: a comma-separated list of Gemini models to try in order |
+| `GROQ_API_KEY` / `GROQ_MODEL` | Optional alternative provider. If both keys are set, set `AI_PROVIDER=gemini` to use Gemini |
 
 ## Limitations
 
-This is an educational game. Inspection scenarios in the 3D game are written by the team, not AI analysis. Prices are illustrative and real repair costs vary by vehicle, shop, and region. It does not diagnose real vehicles and is not a substitute for a professional inspection.
+RepairIQ Academy is an educational game. Inspection scenarios are written by our team, not AI analysis. Prices are illustrative; real repair costs vary by vehicle, shop, and region. It does not diagnose real vehicles and is not a substitute for a professional inspection.
+
+## What's next
+
+- **Photo check:** upload a photo of real damage and have Gemini explain what it sees and what to ask the shop.
+- More hazards and scenarios, a Spanish option, and testing with real drivers to tune difficulty.
+
+## Team
+
+<!-- Replace with your names -->
+- Kerry, ...
+- ...
+- ...
