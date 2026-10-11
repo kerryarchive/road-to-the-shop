@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import html
 import json
+import math
 import os
 import re
 from collections import Counter
@@ -320,12 +321,14 @@ def _to_cost(value) -> int:
     if isinstance(value, bool):
         raise QuoteError("A quote cost wasn't a number.")
     if isinstance(value, (int, float)):
+        if isinstance(value, float) and not math.isfinite(value):
+            raise QuoteError("A quote cost wasn't a finite number.")
         cost = int(round(value))
     elif isinstance(value, str):
         digits = re.sub(r"[^\d.]", "", value)
         try:
             cost = int(round(float(digits)))
-        except ValueError as exc:
+        except (ValueError, OverflowError) as exc:
             raise QuoteError("A quote cost wasn't a number.") from exc
     else:
         raise QuoteError("A quote cost wasn't a number.")
@@ -334,8 +337,13 @@ def _to_cost(value) -> int:
     return cost
 
 
-def validate_payload(data) -> dict:
-    """Check the model's JSON and normalize it into the game's quote format."""
+def validate_payload(data, log: list | None = None) -> dict:
+    """Check the model's JSON and normalize it into the game's quote format.
+
+    `log` is the damage log the quotes are for. When given, the fair quote is
+    also required to fall inside `reference_range(log)`; callers that can't
+    supply it (or that have no damage yet) can omit it to skip that check.
+    """
     if not isinstance(data, dict):
         raise QuoteError("The estimator's reply wasn't a JSON object.")
 
@@ -362,17 +370,22 @@ def validate_payload(data) -> dict:
     tips = [str(t).strip() for t in raw_tips if str(t).strip()] if isinstance(raw_tips, list) else []
     tips = (tips + [t for t in DEFAULT_TIPS if t not in tips])[:3]
 
-    warnings = []
     dealer = quotes["quote_dealer"]["cost"]
     budget = quotes["quote_budget"]["cost"]
     fair = quotes["quote_fair"]["cost"]
     if not budget < fair < dealer:
-        warnings.append(
-            "The AI's prices aren't in the usual order (scrapyard < fair < dealer). "
-            "Judge each one against the reference range below."
+        raise QuoteError(
+            "The AI's prices weren't in the usual order (scrapyard < fair < dealer)."
         )
 
-    return {"greeting": greeting, "quotes": quotes, "tips": tips, "warnings": warnings}
+    if log:
+        low, high = reference_range(log)
+        if not (low <= fair <= high):
+            raise QuoteError(
+                f"The fair quote (${fair:,}) landed outside the reference range (${low:,}-${high:,})."
+            )
+
+    return {"greeting": greeting, "quotes": quotes, "tips": tips, "warnings": []}
 
 
 def _api_error(name: str):
@@ -442,7 +455,7 @@ def fetch_ai_quotes(log: list, client_factory=None) -> dict:
             choices = getattr(response, "choices", None) or []
             content = choices[0].message.content if choices else ""
             try:
-                result = validate_payload(extract_json(content))
+                result = validate_payload(extract_json(content), log)
             except QuoteError as exc:
                 last_error = exc
                 continue

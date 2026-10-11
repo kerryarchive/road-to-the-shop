@@ -164,7 +164,10 @@ def test_validate_payload_reads_cost_strings():
     assert app.validate_payload(payload)["quotes"]["quote_dealer"]["cost"] == 2450
 
 
-@pytest.mark.parametrize("bad_cost", [0, -5, 999_999, "lots", None, True])
+@pytest.mark.parametrize(
+    "bad_cost",
+    [0, -5, 999_999, "lots", None, True, float("inf"), float("-inf"), float("nan")],
+)
 def test_validate_payload_rejects_bad_costs(bad_cost):
     payload = good_payload()
     payload["quote_fair"]["cost"] = bad_cost
@@ -187,9 +190,33 @@ def test_validate_payload_fills_in_missing_tips():
     assert tips[0] == "Only one?"
 
 
-def test_validate_payload_warns_when_prices_out_of_order():
-    result = app.validate_payload(good_payload(dealer=500, budget=300, fair=900))
-    assert result["warnings"]
+def test_validate_payload_rejects_prices_out_of_order():
+    with pytest.raises(app.QuoteError):
+        app.validate_payload(good_payload(dealer=500, budget=300, fair=900))
+
+
+def test_validate_payload_rejects_fair_outside_reference_range(one_pothole):
+    # Pothole reference range is $250-$700; 900 is outside it.
+    payload = good_payload(dealer=2000, budget=100, fair=900)
+    with pytest.raises(app.QuoteError):
+        app.validate_payload(payload, one_pothole)
+
+
+def test_validate_payload_accepts_fair_at_reference_range_boundaries(one_pothole):
+    low, high = app.reference_range(one_pothole)
+
+    at_low = app.validate_payload(good_payload(dealer=800, budget=100, fair=low), one_pothole)
+    assert at_low["quotes"]["quote_fair"]["cost"] == low
+
+    at_high = app.validate_payload(good_payload(dealer=900, budget=100, fair=high), one_pothole)
+    assert at_high["quotes"]["quote_fair"]["cost"] == high
+
+
+def test_validate_payload_skips_range_check_without_a_log():
+    # Callers (like server.py's tests) that don't have a log can omit it.
+    payload = good_payload(dealer=6000, budget=100, fair=5000)
+    result = app.validate_payload(payload)
+    assert result["quotes"]["quote_fair"]["cost"] == 5000
 
 
 # ---------------------------------------------------------------------------
@@ -197,7 +224,8 @@ def test_validate_payload_warns_when_prices_out_of_order():
 # ---------------------------------------------------------------------------
 
 def test_fetch_ai_quotes_success(gemini_env, one_pothole):
-    client = FakeClient([json.dumps(good_payload())])
+    # fair=500 falls inside the pothole's $250-$700 reference range.
+    client = FakeClient([json.dumps(good_payload(fair=500))])
     result = app.fetch_ai_quotes(one_pothole, client_factory=factory_for(client))
     assert result["is_ai"] is True
     assert "Gemini" in result["source"]
@@ -205,7 +233,7 @@ def test_fetch_ai_quotes_success(gemini_env, one_pothole):
 
 
 def test_fetch_ai_quotes_retries_after_bad_reply(gemini_env, one_pothole):
-    client = FakeClient(["not json at all", json.dumps(good_payload())])
+    client = FakeClient(["not json at all", json.dumps(good_payload(fair=500))])
     result = app.fetch_ai_quotes(one_pothole, client_factory=factory_for(client))
     assert result["is_ai"] is True
     assert len(client.calls) == 2
@@ -216,6 +244,40 @@ def test_fetch_ai_quotes_gives_up_after_two_bad_replies(gemini_env, one_pothole)
     client = FakeClient(["nope", "still nope"])
     with pytest.raises(app.QuoteError):
         app.fetch_ai_quotes(one_pothole, client_factory=factory_for(client))
+
+
+def test_fetch_ai_quotes_retries_after_out_of_range_quote(gemini_env, one_pothole):
+    # First reply's fair cost ($900) is outside the pothole's $250-$700
+    # reference range and must be rejected; the second (in-range) reply
+    # is used instead, on the retry attempt (no JSON mode).
+    out_of_range = json.dumps(good_payload(fair=900))
+    in_range = json.dumps(good_payload(fair=500))
+    client = FakeClient([out_of_range, in_range])
+    result = app.fetch_ai_quotes(one_pothole, client_factory=factory_for(client))
+    assert result["is_ai"] is True
+    assert len(client.calls) == 2
+    assert "response_format" not in client.calls[1]
+    assert result["quotes"]["quote_fair"]["cost"] == 500
+
+
+def test_exhausted_out_of_range_retries_reach_offline_fallback(gemini_env, one_pothole):
+    # Both attempts return a fair cost outside the reference range, so both
+    # are rejected and fetch_ai_quotes gives up exactly like any other
+    # unusable reply -- this is what triggers the existing offline fallback
+    # in app.py's load_ai_quotes() and server.py's /api/quotes route.
+    out_of_range = json.dumps(good_payload(fair=900))
+    client = FakeClient([out_of_range, out_of_range])
+    with pytest.raises(app.QuoteError):
+        app.fetch_ai_quotes(one_pothole, client_factory=factory_for(client))
+    assert len(client.calls) == 2
+
+    # The fallback those callers reach for is build_offline_quotes(), which
+    # must still produce valid, clearly-labeled, in-range quotes.
+    fallback = app.build_offline_quotes(one_pothole)
+    assert fallback["is_ai"] is False
+    assert "not AI-generated" in fallback["source"]
+    low, high = app.reference_range(one_pothole)
+    assert low <= fallback["quotes"]["quote_fair"]["cost"] <= high
 
 
 def test_fetch_ai_quotes_without_key(monkeypatch, one_pothole):
@@ -265,7 +327,7 @@ def two_models(gemini_env, monkeypatch):
 
 @pytest.mark.parametrize("failure", [FakeStatusError(503), FakeStatusError(404), FakeRateError("429")])
 def test_busy_model_falls_through_to_next(two_models, one_pothole, failure):
-    client = FakeClient([failure, json.dumps(good_payload())])
+    client = FakeClient([failure, json.dumps(good_payload(fair=500))])
     result = app.fetch_ai_quotes(one_pothole, client_factory=factory_for(client))
     assert [c["model"] for c in client.calls] == ["busy-model", "good-model"]
     assert "good-model" in result["source"]
